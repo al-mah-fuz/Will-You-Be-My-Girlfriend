@@ -3,7 +3,7 @@
  * Guarantees that public production domains are used and Vercel preview URLs are never leaked.
  */
 
-export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriendy.vercel.app';
+export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriend.vercel.app';
 
 export function cleanBaseUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, '');

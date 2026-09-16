@@ -36,8 +36,8 @@ function getBaseUrl(req: express.Request): string {
   }
 
   // If request arrived via any Vercel domain for this app, ensure canonical production domain
-  if (hostWithoutPort.includes('will-you-be-my') || hostWithoutPort.includes('girlfriendy') || isVercelPreviewHost(hostWithoutPort)) {
-    return 'https://will-you-be-my-girlfriendy.vercel.app';
+  if (hostWithoutPort.includes('will-you-be-my') || isVercelPreviewHost(hostWithoutPort)) {
+    return 'https://will-you-be-my-girlfriend.vercel.app';
   }
 
   // 2. Use Vercel built-in system production domain if set by Vercel

@@ -5,7 +5,7 @@
  * without requiring any new environment variables.
  */
 
-export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriendy.vercel.app';
+export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriend.vercel.app';
 
 // Format any raw URL into a clean base URL (e.g. "https://domain.com")
 export function cleanBaseUrl(url: string): string {
