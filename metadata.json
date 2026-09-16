@@ -1,0 +1,6 @@
+{
+  "name": "Will You Be My Girlfriend?",
+  "description": "A playful, romantic, interactive digital ask-out experience with personalized invitations, digital envelope animation, and email notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

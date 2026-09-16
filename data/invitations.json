@@ -1,0 +1,109 @@
+[
+  {
+    "id": "EZzE4J",
+    "creatorName": "mahfuz",
+    "recipientName": "fauziyyah",
+    "creatorEmail": "senkuhustle@gmail.com",
+    "personalMessage": "i really love you your smile and so on",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-16T12:40:49.723Z",
+    "respondedAt": "2026-09-16T12:41:41.787Z"
+  },
+  {
+    "id": "U75svU",
+    "creatorName": "hafeez",
+    "recipientName": "qawiyah",
+    "creatorEmail": "senkuhustle@gmail.com",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T13:57:26.634Z",
+    "respondedAt": null
+  },
+  {
+    "id": "STFcpY",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "romeo@verona.it",
+    "personalMessage": "My heart is forever yours.",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-16T14:00:51.866Z",
+    "respondedAt": "2026-09-16T14:00:59.106Z"
+  },
+  {
+    "id": "zf5hDZ",
+    "creatorName": "hafeez",
+    "recipientName": "fauziyyah",
+    "creatorEmail": "senkuhustle@gmail.com",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T14:10:38.580Z",
+    "respondedAt": null
+  },
+  {
+    "id": "tRXW8q",
+    "creatorName": "John",
+    "recipientName": "Sarah",
+    "creatorEmail": "john@test.com",
+    "personalMessage": "Be mine!",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:08:18.711Z",
+    "respondedAt": null
+  },
+  {
+    "id": "trDA23",
+    "creatorName": "John",
+    "recipientName": "Sarah",
+    "creatorEmail": "john@test.com",
+    "personalMessage": "Be mine!",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:08:24.925Z",
+    "respondedAt": null
+  },
+  {
+    "id": "C2kmgd",
+    "creatorName": "Alex",
+    "recipientName": "Taylor",
+    "creatorEmail": "alex@love.com",
+    "personalMessage": "Will you be my girlfriend?",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:09:13.162Z",
+    "respondedAt": null
+  },
+  {
+    "id": "X8fnB9",
+    "creatorName": "Sam",
+    "recipientName": "Jordan",
+    "creatorEmail": "sam@example.com",
+    "personalMessage": "Will you be my girlfriend?",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:15:49.951Z",
+    "respondedAt": null
+  },
+  {
+    "id": "XEr7VD",
+    "creatorName": "John",
+    "recipientName": "Sarah",
+    "creatorEmail": "john@test.com",
+    "personalMessage": "I've really enjoyed getting to know you, and I wanted to do something special for you ❤️",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:18:35.580Z",
+    "respondedAt": null
+  },
+  {
+    "id": "jJKwFN",
+    "creatorName": "Alex",
+    "recipientName": "Taylor",
+    "creatorEmail": "alex@example.com",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T15:20:13.539Z",
+    "respondedAt": null
+  },
+  {
+    "id": "NBshvb",
+    "creatorName": "Jordan",
+    "recipientName": "Morgan",
+    "creatorEmail": "jordan@example.com",
+    "personalMessage": "I've really enjoyed getting to know you, and I wanted to do something special for you ❤️",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-16T15:20:13.559Z",
+    "respondedAt": "2026-09-16T15:20:13.572Z"
+  }
+]
