@@ -134,5 +134,15 @@
     "responseStatus": "accepted",
     "createdAt": "2026-09-16T20:02:55.613Z",
     "respondedAt": "2026-09-16T20:02:55.681Z"
+  },
+  {
+    "id": "bYM2jC",
+    "creatorName": "Alex",
+    "recipientName": "Taylor",
+    "creatorEmail": "alex@example.com",
+    "personalMessage": "You make every day brighter 💖",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-16T20:29:55.126Z",
+    "respondedAt": null
   }
 ]

@@ -29,11 +29,15 @@ function getBaseUrl(req: express.Request): string {
   const rawHost = (req.get('x-forwarded-host') || req.get('host') || 'localhost:3000').split(',')[0].trim();
   const hostWithoutPort = rawHost.split(':')[0].toLowerCase();
 
-  // If request arrived via a Vercel preview URL (e.g. *-g6h6avlhw-uuu16.vercel.app),
-  // automatically resolve to the public production website domain:
-  if (isVercelPreviewHost(hostWithoutPort)) {
-    const cleanHost = cleanVercelPreviewHost(hostWithoutPort);
-    return `https://${cleanHost}`;
+  // If local development, preserve localhost
+  if (hostWithoutPort.includes('localhost') || hostWithoutPort.includes('127.0.0.1')) {
+    const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    return `${proto}://${rawHost}`;
+  }
+
+  // If request arrived via any Vercel domain for this app, ensure canonical production domain
+  if (hostWithoutPort.includes('will-you-be-my') || hostWithoutPort.includes('girlfriendy') || isVercelPreviewHost(hostWithoutPort)) {
+    return 'https://will-you-be-my-girlfriendy.vercel.app';
   }
 
   // 2. Use Vercel built-in system production domain if set by Vercel
@@ -42,7 +46,7 @@ function getBaseUrl(req: express.Request): string {
     return `https://${vercelProdDomain.trim().replace(/\/+$/, '')}`;
   }
 
-  // 3. Default to current request host for production domains, custom domains, and local dev
+  // 3. Default to current request host for custom domains
   const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
   return `${proto}://${rawHost}`;
 }

@@ -5,6 +5,8 @@
  * without requiring any new environment variables.
  */
 
+export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriendy.vercel.app';
+
 // Format any raw URL into a clean base URL (e.g. "https://domain.com")
 export function cleanBaseUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, '');
@@ -19,21 +21,14 @@ export function isVercelPreviewHost(host: string): boolean {
   const normalized = host.toLowerCase().split(':')[0];
   if (!normalized.endsWith('.vercel.app')) return false;
 
+  // If it is already the canonical production domain, it is not a preview host
+  if (normalized === CANONICAL_PRODUCTION_DOMAIN) return false;
+
+  // Any other vercel.app domain for this project is a preview/branch deployment
+  if (normalized.includes('will-you-be-my')) return true;
+
   const base = normalized.slice(0, -'.vercel.app'.length);
-
-  // Check Git branch previews: <project>-git-<branch>-<user>.vercel.app
-  if (base.includes('-git-')) return true;
-
-  // Check unique deployment hash previews: <project>-<hash>-<user>.vercel.app
-  const parts = base.split('-');
-  if (parts.length >= 3) {
-    const hashCandidate = parts[parts.length - 2];
-    if (/^[a-z0-9]{7,16}$/.test(hashCandidate)) {
-      return true;
-    }
-  }
-
-  return false;
+  return base.includes('-git-') || base.includes('-');
 }
 
 // Convert a Vercel preview host to its canonical production domain
@@ -41,59 +36,59 @@ export function cleanVercelPreviewHost(host: string): string {
   const normalized = host.toLowerCase().split(':')[0];
   if (!normalized.endsWith('.vercel.app')) return normalized;
 
-  const base = normalized.slice(0, -'.vercel.app'.length);
-
-  if (base.includes('-git-')) {
-    return base.split('-git-')[0] + '.vercel.app';
+  // Any deployment of this project always resolves to the canonical production domain
+  if (normalized.includes('will-you-be-my') || normalized.includes('girlfriendy')) {
+    return CANONICAL_PRODUCTION_DOMAIN;
   }
 
-  const parts = base.split('-');
-  if (parts.length >= 3) {
-    const hashCandidate = parts[parts.length - 2];
-    if (/^[a-z0-9]{7,16}$/.test(hashCandidate)) {
-      return parts.slice(0, -2).join('-') + '.vercel.app';
-    }
-  }
-
-  return normalized;
+  return CANONICAL_PRODUCTION_DOMAIN;
 }
 
 /**
  * Builds the canonical public share URL for an invitation ID.
- * Uses the existing production website origin and sanitizes any preview deployment artifacts.
- * Requires NO new environment variables.
+ * Uses the canonical production website domain (will-you-be-my-girlfriendy.vercel.app)
+ * while allowing localhost/dev environments to test locally.
  */
 export function buildPublicShareUrl(invitationId: string, serverShareUrl?: string): string {
-  // 1. Primary: Use the browser window origin
-  if (typeof window !== 'undefined' && window.location) {
-    const originHost = window.location.host;
+  const encodedId = encodeURIComponent(invitationId);
 
-    // If on a Vercel preview domain (*-uuu16.vercel.app), resolve to the public production domain
-    if (isVercelPreviewHost(originHost)) {
-      const cleanHost = cleanVercelPreviewHost(originHost);
-      return `https://${cleanHost}/invite/${encodeURIComponent(invitationId)}`;
+  // 1. Primary: Browser window origin
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.host.toLowerCase().split(':')[0];
+    const origin = window.location.origin ? window.location.origin.replace(/\/+$/, '') : '';
+
+    // If running on localhost or 127.0.0.1 for local testing, keep the local origin
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      return `${origin}/invite/${encodedId}`;
     }
 
-    // If on normal production domain or custom domain
-    if (window.location.origin) {
-      const cleanOrigin = window.location.origin.replace(/\/+$/, '');
-      return `${cleanOrigin}/invite/${encodeURIComponent(invitationId)}`;
+    // If on any Vercel domain or will-you-be-my domain, always use the canonical domain
+    if (host.endsWith('.vercel.app') || host.includes('will-you-be-my') || host.includes('girlfriendy')) {
+      return `https://${CANONICAL_PRODUCTION_DOMAIN}/invite/${encodedId}`;
+    }
+
+    // If on a custom domain, preserve it
+    if (origin) {
+      return `${origin}/invite/${encodedId}`;
     }
   }
 
-  // 2. Fallback: Use sanitized server suggested URL
+  // 2. Server suggested URL fallback
   if (serverShareUrl && typeof serverShareUrl === 'string' && serverShareUrl.trim()) {
     try {
       const parsed = new URL(serverShareUrl);
-      if (isVercelPreviewHost(parsed.host)) {
-        const cleanHost = cleanVercelPreviewHost(parsed.host);
-        return `https://${cleanHost}/invite/${encodeURIComponent(invitationId)}`;
+      const host = parsed.host.toLowerCase().split(':')[0];
+      if (host.includes('localhost') || host.includes('127.0.0.1')) {
+        return `${parsed.origin}/invite/${encodedId}`;
       }
-      return serverShareUrl;
+      if (host.endsWith('.vercel.app') || host.includes('will-you-be-my')) {
+        return `https://${CANONICAL_PRODUCTION_DOMAIN}/invite/${encodedId}`;
+      }
+      return serverShareUrl.replace(/\/+$/, '');
     } catch {
       // ignore
     }
   }
 
-  return `/invite/${encodeURIComponent(invitationId)}`;
+  return `https://${CANONICAL_PRODUCTION_DOMAIN}/invite/${encodedId}`;
 }
