@@ -10,7 +10,19 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/invite/:id*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/invite/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

@@ -124,5 +124,15 @@
     "responseStatus": "pending",
     "createdAt": "2026-09-16T19:40:33.018Z",
     "respondedAt": null
+  },
+  {
+    "id": "R5M8Cg",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "romeo@verona.com",
+    "personalMessage": "You are the sun that lights up my world ☀️❤️",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-16T20:02:55.613Z",
+    "respondedAt": "2026-09-16T20:02:55.681Z"
   }
 ]
