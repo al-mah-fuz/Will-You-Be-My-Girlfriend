@@ -1,9 +1,7 @@
 /**
  * URL Utilities for server-side invitation link generation.
- * Guarantees that public production domains are used and Vercel preview URLs are never leaked.
+ * Ensures preview URLs are safely identified and production domains are preserved.
  */
-
-export const CANONICAL_PRODUCTION_DOMAIN = 'will-you-be-my-girlfriend.vercel.app';
 
 export function cleanBaseUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, '');
@@ -17,20 +15,20 @@ export function isVercelPreviewHost(host: string): boolean {
   const normalized = host.toLowerCase().split(':')[0];
   if (!normalized.endsWith('.vercel.app')) return false;
 
-  if (normalized === CANONICAL_PRODUCTION_DOMAIN) return false;
-  if (normalized.includes('will-you-be-my')) return true;
-
   const base = normalized.slice(0, -'.vercel.app'.length);
-  return base.includes('-git-') || base.includes('-');
-}
 
-export function cleanVercelPreviewHost(host: string): string {
-  const normalized = host.toLowerCase().split(':')[0];
-  if (!normalized.endsWith('.vercel.app')) return normalized;
+  // Match Git branch previews: <project>-git-<branch>-<user>.vercel.app
+  if (base.includes('-git-')) return true;
 
-  if (normalized.includes('will-you-be-my') || normalized.includes('girlfriendy')) {
-    return CANONICAL_PRODUCTION_DOMAIN;
+  // Match deployment-specific hash previews: <project>-<hash>-<user>.vercel.app
+  const parts = base.split('-');
+  if (parts.length >= 3) {
+    const secondToLast = parts[parts.length - 2];
+    if (/^[a-z0-9]{7,16}$/.test(secondToLast)) {
+      return true;
+    }
   }
 
-  return CANONICAL_PRODUCTION_DOMAIN;
+  return false;
 }
+

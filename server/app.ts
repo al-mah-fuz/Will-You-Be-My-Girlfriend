@@ -8,7 +8,7 @@ import {
   toPublicInvitation,
 } from './db.js';
 import { sendAcceptanceNotification } from './email.js';
-import { cleanBaseUrl, isVercelPreviewHost, cleanVercelPreviewHost } from './url.js';
+import { cleanBaseUrl, isVercelPreviewHost } from './url.js';
 
 // Email validator regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,18 +35,13 @@ function getBaseUrl(req: express.Request): string {
     return `${proto}://${rawHost}`;
   }
 
-  // If request arrived via any Vercel domain for this app, ensure canonical production domain
-  if (hostWithoutPort.includes('will-you-be-my') || isVercelPreviewHost(hostWithoutPort)) {
-    return 'https://will-you-be-my-girlfriend.vercel.app';
-  }
-
   // 2. Use Vercel built-in system production domain if set by Vercel
   const vercelProdDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (vercelProdDomain && typeof vercelProdDomain === 'string' && vercelProdDomain.trim()) {
     return `https://${vercelProdDomain.trim().replace(/\/+$/, '')}`;
   }
 
-  // 3. Default to current request host for custom domains
+  // 3. Default to current request host for custom domains or direct Vercel domains
   const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
   return `${proto}://${rawHost}`;
 }
