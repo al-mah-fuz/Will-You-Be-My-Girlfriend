@@ -205,14 +205,25 @@
     "respondedAt": "2026-09-17T08:42:36.139Z"
   },
   {
-    "id": "MEMTPX",
-    "invitationId": "MEMTPX",
-    "creatorName": "Romeo",
-    "recipientName": "Juliet",
-    "creatorEmail": "romeo@verona.it",
-    "personalMessage": "My heart belongs to you forever.",
-    "responseStatus": "accepted",
-    "createdAt": "2026-09-17T08:42:36.113Z",
-    "respondedAt": "2026-09-17T08:42:36.139Z"
+    "id": "WU8aeA",
+    "invitationId": "WU8aeA",
+    "creatorName": "DevTester",
+    "recipientName": "Sweetheart",
+    "creatorEmail": "test@love.com",
+    "personalMessage": "You make my world shine.",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-17T09:03:53.686Z",
+    "respondedAt": null
+  },
+  {
+    "id": "WU8aeA",
+    "invitationId": "WU8aeA",
+    "creatorName": "DevTester",
+    "recipientName": "Sweetheart",
+    "creatorEmail": "test@love.com",
+    "personalMessage": "You make my world shine.",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-17T09:03:53.686Z",
+    "respondedAt": null
   }
 ]

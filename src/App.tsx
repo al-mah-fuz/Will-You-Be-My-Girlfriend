@@ -21,26 +21,30 @@ export default function App() {
     const path = window.location.pathname;
     const hash = window.location.hash;
 
-    // Check pathname: /invite/:id
-    const inviteMatch = path.match(/^\/invite\/([^/?#]+)/);
+    // Check pathname: /invite/:id, /invitation/:id, /invitations/:id
+    const inviteMatch = path.match(/^\/(?:invite|invitations?)\/([^/?#]+)/i);
     if (inviteMatch && inviteMatch[1]) {
       setActiveInvitationId(decodeURIComponent(inviteMatch[1].trim()));
       setCurrentView('recipient');
       return;
     }
 
-    // Check hash fallback: #/invite/:id
-    const hashMatch = hash.match(/^#\/invite\/([^/?#]+)/);
+    // Check hash fallback: #/invite/:id, #invite/:id, #/invitation/:id
+    const hashMatch = hash.match(/^#\/?(?:invite|invitations?)\/([^/?#]+)/i);
     if (hashMatch && hashMatch[1]) {
       setActiveInvitationId(decodeURIComponent(hashMatch[1].trim()));
       setCurrentView('recipient');
       return;
     }
 
-    // Check query fallback: ?invite=:id
+    // Check query fallback: ?invite=:id, ?id=:id, ?invitationId=:id
     const searchParams = new URLSearchParams(window.location.search);
-    const queryInvite = searchParams.get('invite');
-    if (queryInvite) {
+    const queryInvite =
+      searchParams.get('invite') ||
+      searchParams.get('id') ||
+      searchParams.get('invitationId') ||
+      searchParams.get('invitation_id');
+    if (queryInvite && queryInvite.trim()) {
       setActiveInvitationId(decodeURIComponent(queryInvite.trim()));
       setCurrentView('recipient');
       return;
