@@ -99,6 +99,7 @@ export async function acceptInvitation(id: string): Promise<AcceptInvitationResp
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ id: cleanId, invitationId: cleanId }),
     }
   );
 

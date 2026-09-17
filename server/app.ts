@@ -43,39 +43,48 @@ app.use((req, res, next) => {
 function extractInvitationId(req: express.Request): string {
   // 1. Direct route params (checking id, invitationId, and positional params)
   const paramId =
-    req.params.id ||
-    (req.params as any).invitationId ||
-    (req.params as any).invitation_id ||
-    (req.params as any)[0];
+    req.params?.id ||
+    (req.params as any)?.invitationId ||
+    (req.params as any)?.invitation_id ||
+    (req.params as any)?.[0];
   if (typeof paramId === 'string' && paramId.trim()) {
     return decodeURIComponent(paramId).trim();
   }
 
   // 2. Query params
   const qId =
-    req.query.id ||
-    req.query.invitationId ||
-    req.query.invitation_id ||
-    req.query.invite ||
-    req.query.code;
+    req.query?.id ||
+    req.query?.invitationId ||
+    req.query?.invitation_id ||
+    req.query?.invite ||
+    req.query?.code;
   if (typeof qId === 'string' && qId.trim()) {
     return decodeURIComponent(String(qId)).trim();
   }
 
-  // 3. Vercel query wildcard params (match or 0)
-  const rawMatch = req.query.match || (req.query as any)['0'];
+  // 3. Request body (e.g. sent by POST JSON payload)
+  const bodyId =
+    req.body?.id ||
+    req.body?.invitationId ||
+    req.body?.invitation_id;
+  if (typeof bodyId === 'string' && bodyId.trim()) {
+    return decodeURIComponent(String(bodyId)).trim();
+  }
+
+  // 4. Vercel query wildcard params (match or 0)
+  const rawMatch = req.query?.match || (req.query as any)?.['0'];
   if (typeof rawMatch === 'string' && rawMatch.trim()) {
     const parts = rawMatch.split('/').filter(Boolean);
-    const lastPart = parts[parts.length - 1];
-    if (
-      lastPart &&
-      !['invitations', 'invitation', 'invite', 'api', 'accept'].includes(lastPart.toLowerCase())
-    ) {
-      return decodeURIComponent(lastPart).trim();
+    // Find the part that is not 'invitations', 'invitation', 'invite', 'api', or 'accept'
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      if (p && !['invitations', 'invitation', 'invite', 'api', 'accept'].includes(p.toLowerCase())) {
+        return decodeURIComponent(p).trim();
+      }
     }
   }
 
-  // 4. Fallback: Parse directly from raw requested URL string or headers
+  // 5. Fallback: Parse directly from raw requested URL string or headers
   const urlCandidates = [
     req.headers['x-matched-path'] as string,
     req.headers['x-forwarded-uri'] as string,
