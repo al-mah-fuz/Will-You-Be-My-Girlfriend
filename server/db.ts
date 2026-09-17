@@ -72,8 +72,10 @@ export function generateUniqueId(length = 6): string {
  */
 export function normalizeInvitationRecord(raw: any): Invitation | null {
   if (!raw || typeof raw !== 'object') return null;
-  const id = raw.id || raw.invitationId || raw.invitation_id;
-  if (!id || typeof id !== 'string') return null;
+  const rawId = raw.id ?? raw.invitationId ?? raw.invitation_id ?? raw._id ?? raw.code;
+  if (!rawId) return null;
+  const id = String(rawId).trim();
+  if (!id) return null;
 
   // Handle all possible variations of field names for the personal message
   const rawMsg =
@@ -87,7 +89,8 @@ export function normalizeInvitationRecord(raw: any): Invitation | null {
     typeof rawMsg === 'string' && rawMsg.trim().length > 0 ? rawMsg.trim() : undefined;
 
   return {
-    id: id.trim(),
+    id,
+    invitationId: id,
     creatorName: (raw.creatorName || raw.creator_name || 'Someone').trim(),
     recipientName: (raw.recipientName || raw.recipient_name || 'My Special Someone').trim(),
     creatorEmail: (raw.creatorEmail || raw.creator_email || '').trim().toLowerCase(),
@@ -104,6 +107,7 @@ export function normalizeInvitationRecord(raw: any): Invitation | null {
 export function toPublicInvitation(inv: Invitation): PublicInvitation {
   return {
     id: inv.id,
+    invitationId: inv.id,
     creatorName: inv.creatorName,
     recipientName: inv.recipientName,
     personalMessage: inv.personalMessage,
@@ -123,13 +127,28 @@ function loadDiskFileIntoCache(filePath: string): number {
     if (!raw.trim()) return 0;
     const parsed = JSON.parse(raw);
     let loadedCount = 0;
+
+    let items: any[] = [];
     if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        const normalized = normalizeInvitationRecord(item);
-        if (normalized) {
-          invitationsMap.set(normalized.id, normalized);
-          loadedCount++;
+      items = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.invitations)) {
+        items = parsed.invitations;
+      } else if (Array.isArray(parsed.data)) {
+        items = parsed.data;
+      } else {
+        items = Object.values(parsed);
+      }
+    }
+
+    for (const item of items) {
+      const normalized = normalizeInvitationRecord(item);
+      if (normalized) {
+        invitationsMap.set(normalized.id, normalized);
+        if (normalized.invitationId && normalized.invitationId !== normalized.id) {
+          invitationsMap.set(normalized.invitationId, normalized);
         }
+        loadedCount++;
       }
     }
     return loadedCount;
@@ -262,25 +281,28 @@ async function fetchFromKv(id: string): Promise<Invitation | null> {
  * Essential for multi-process or serverless environments.
  */
 function lookupOnDisk(id: string): Invitation | null {
-  // Check writable DB_FILE
-  loadDiskFileIntoCache(DB_FILE);
-  if (invitationsMap.has(id)) {
-    return invitationsMap.get(id)!;
-  }
+  const candidateFiles = [
+    DB_FILE,
+    path.join(os.tmpdir(), 'invitations.json'),
+    path.join(process.cwd(), 'data', 'invitations.json'),
+    path.join(process.cwd(), 'invitations.json'),
+  ];
 
-  // Check bundled path
-  const bundledPath = path.join(process.cwd(), 'data', 'invitations.json');
-  if (bundledPath !== DB_FILE) {
-    loadDiskFileIntoCache(bundledPath);
+  for (const filePath of candidateFiles) {
+    loadDiskFileIntoCache(filePath);
     if (invitationsMap.has(id)) {
       return invitationsMap.get(id)!;
     }
   }
 
-  // Check case-insensitive
+  // Check case-insensitive and alias matching across all in-memory invitations
   const lowerId = id.toLowerCase();
   for (const [key, value] of invitationsMap.entries()) {
-    if (key.toLowerCase() === lowerId) {
+    if (
+      key.toLowerCase() === lowerId ||
+      value.id.toLowerCase() === lowerId ||
+      (value.invitationId && value.invitationId.toLowerCase() === lowerId)
+    ) {
       return value;
     }
   }
@@ -306,6 +328,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
 
   const invitation: Invitation = {
     id,
+    invitationId: id,
     creatorName: input.creatorName.trim(),
     recipientName: input.recipientName.trim(),
     creatorEmail: input.creatorEmail.trim().toLowerCase(),
@@ -316,6 +339,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
   };
 
   invitationsMap.set(id, invitation);
+  invitationsMap.set(id.toLowerCase(), invitation);
 
   // Persist locally & cloud KV
   await persistToDisk();
@@ -331,6 +355,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
 export async function getInvitation(id: string): Promise<Invitation | null> {
   if (!id || typeof id !== 'string') return null;
   const cleanId = id.trim();
+  if (!cleanId) return null;
   await initDb();
 
   // 1. Check in-memory cache first (exact match)
@@ -340,7 +365,11 @@ export async function getInvitation(id: string): Promise<Invitation | null> {
   // 2. Check in-memory cache (case-insensitive fallback)
   const lowerCleanId = cleanId.toLowerCase();
   for (const [key, val] of invitationsMap.entries()) {
-    if (key.toLowerCase() === lowerCleanId) {
+    if (
+      key.toLowerCase() === lowerCleanId ||
+      val.id.toLowerCase() === lowerCleanId ||
+      (val.invitationId && val.invitationId.toLowerCase() === lowerCleanId)
+    ) {
       return val;
     }
   }
@@ -392,6 +421,10 @@ export async function acceptInvitation(id: string): Promise<{
   inv.respondedAt = new Date().toISOString();
 
   invitationsMap.set(inv.id, inv);
+  invitationsMap.set(inv.id.toLowerCase(), inv);
+  if (inv.invitationId) {
+    invitationsMap.set(inv.invitationId, inv);
+  }
 
   await persistToDisk();
   await syncToKv(inv);

@@ -95,9 +95,43 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
     );
   }
 
-  // 2. Error State (Invalid invitation or server error)
+  // 2. Error State (Differentiated error handling)
   if (errorMessage || !invitation) {
-    const isNotFound = errorMessage?.includes("doesn't exist") || errorMessage?.includes('not found');
+    const errLower = (errorMessage || '').toLowerCase();
+    const isNotFound = errLower.includes('not found') || errLower.includes("doesn't exist");
+    const isInvalidId = errLower.includes('invalid') || errLower.includes('missing');
+    const isPermission =
+      errLower.includes('permission') ||
+      errLower.includes('access denied') ||
+      errLower.includes('unauthorized');
+    const isDbOrNetwork =
+      errLower.includes('database') ||
+      errLower.includes('server') ||
+      errLower.includes('network') ||
+      errLower.includes('unavailable') ||
+      errLower.includes('connection') ||
+      errLower.includes('temporarily');
+
+    let errorTitle = 'Unable to Load Invitation';
+    let errorDescription =
+      errorMessage || 'Something went wrong while retrieving the invitation. Please try again.';
+
+    if (isNotFound) {
+      errorTitle = 'Invitation Not Found 💔';
+      errorDescription =
+        'We could not find an invitation with this link. Please check that the URL was copied completely or ask the sender to resend it.';
+    } else if (isInvalidId) {
+      errorTitle = 'Invalid Invitation Link';
+      errorDescription =
+        'The invitation link appears to be incomplete or malformed. Please check the URL.';
+    } else if (isPermission) {
+      errorTitle = 'Access Denied';
+      errorDescription = 'You do not have permission to view this invitation.';
+    } else if (isDbOrNetwork) {
+      errorTitle = 'Connection Issue';
+      errorDescription =
+        'Could not connect to the database. Please check your connection and try again.';
+    }
 
     return (
       <motion.div
@@ -111,15 +145,9 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
             <AlertCircle className="w-8 h-8" />
           </div>
 
-          <h2 className="font-romantic text-2xl font-bold text-rose-950 mb-2">
-            {isNotFound ? "This invitation doesn't exist 💔" : 'Unable to load invitation'}
-          </h2>
+          <h2 className="font-romantic text-2xl font-bold text-rose-950 mb-2">{errorTitle}</h2>
 
-          <p className="text-sm text-rose-800/70 mb-6">
-            {isNotFound
-              ? 'The link might be incorrect or has expired. Please check with the person who sent it.'
-              : errorMessage}
-          </p>
+          <p className="text-sm text-rose-800/70 mb-6">{errorDescription}</p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
@@ -128,7 +156,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <RefreshCw className="w-4 h-4" />
-              Check Again
+              Try Again
             </button>
             <button
               type="button"
@@ -136,7 +164,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-800 font-medium text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <Home className="w-4 h-4" />
-              Go to Home
+              Create an Invitation
             </button>
           </div>
         </div>

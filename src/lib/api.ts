@@ -17,7 +17,25 @@ async function parseJsonResponse<T>(res: Response, defaultErrorText: string): Pr
     try {
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error || data?.message || `${defaultErrorText} (HTTP ${res.status})`);
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+        if (data?.message) {
+          throw new Error(data.message);
+        }
+        if (res.status === 404) {
+          throw new Error('Invitation not found. Please verify your link or ask the sender to share it again.');
+        }
+        if (res.status === 400) {
+          throw new Error('Invalid or missing invitation link. Please check the URL.');
+        }
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Access denied. You do not have permission to view this invitation.');
+        }
+        if (res.status >= 500) {
+          throw new Error('Database or server error. Please try again in a few moments.');
+        }
+        throw new Error(`${defaultErrorText} (HTTP ${res.status})`);
       }
       return data as T;
     } catch (err: unknown) {
@@ -25,20 +43,25 @@ async function parseJsonResponse<T>(res: Response, defaultErrorText: string): Pr
       if (err instanceof Error && !err.message.toLowerCase().includes('json')) {
         throw err;
       }
-      throw new Error(`Server returned malformed JSON (HTTP ${res.status}).`);
+      throw new Error(`Server returned malformed response (HTTP ${res.status}).`);
     }
   }
 
-  // If the server/edge returned non-JSON (e.g. Vercel 404 "This page could not be found" or HTML error)
+  // If the server/edge returned non-JSON
+  if (res.status === 404) {
+    throw new Error('Invitation not found. Please verify your link or ask the sender to share it again.');
+  }
+  if (res.status >= 500) {
+    throw new Error('Server or database temporarily unavailable. Please try again in a few moments.');
+  }
+
   const rawText = await res.text();
   const cleanSnippet = rawText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
   const summary = cleanSnippet
     ? (cleanSnippet.length > 120 ? `${cleanSnippet.slice(0, 120)}...` : cleanSnippet)
     : res.statusText || 'No response details';
 
-  throw new Error(
-    `Server returned non-JSON response (HTTP ${res.status} ${res.statusText || ''}): "${summary}". Please ensure backend API routes are deployed.`
-  );
+  throw new Error(`Unable to load invitation (HTTP ${res.status}): ${summary}`);
 }
 
 export async function createInvitation(
@@ -56,21 +79,28 @@ export async function createInvitation(
 }
 
 export async function getInvitation(id: string): Promise<PublicInvitation> {
-  const res = await fetch(`/api/invitations/${encodeURIComponent(id)}`);
+  const cleanId = id.trim();
+  const res = await fetch(
+    `/api/invitations/${encodeURIComponent(cleanId)}?id=${encodeURIComponent(cleanId)}`
+  );
   const data = await parseJsonResponse<{ success: boolean; invitation: PublicInvitation }>(
     res,
-    "This invitation doesn't exist 💔"
+    'Invitation not found. Please verify the invitation link.'
   );
   return data.invitation;
 }
 
 export async function acceptInvitation(id: string): Promise<AcceptInvitationResponse> {
-  const res = await fetch(`/api/invitations/${encodeURIComponent(id)}/accept`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  const cleanId = id.trim();
+  const res = await fetch(
+    `/api/invitations/${encodeURIComponent(cleanId)}/accept?id=${encodeURIComponent(cleanId)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
 
   const contentType = res.headers.get('content-type') || '';
   if (contentType.toLowerCase().includes('application/json')) {

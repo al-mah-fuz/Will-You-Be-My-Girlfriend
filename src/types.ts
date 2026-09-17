@@ -2,6 +2,7 @@ export type ResponseStatus = 'pending' | 'accepted';
 
 export interface Invitation {
   id: string;
+  invitationId?: string; // alias for ID compatibility
   creatorName: string;
   recipientName: string;
   creatorEmail: string;
@@ -14,6 +15,7 @@ export interface Invitation {
 // Public-safe invitation view (creatorEmail is excluded to protect privacy)
 export interface PublicInvitation {
   id: string;
+  invitationId?: string; // alias for ID compatibility
   creatorName: string;
   recipientName: string;
   personalMessage?: string;
