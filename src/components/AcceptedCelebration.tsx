@@ -6,12 +6,19 @@ import { PublicInvitation } from '../types';
 
 interface AcceptedCelebrationProps {
   invitation: PublicInvitation;
+  emailStatus?: {
+    sent: boolean;
+    provider?: string;
+    error?: string;
+    code?: string;
+  };
   emailPreviewUrl?: string;
   onRevisitLetter?: () => void;
 }
 
 export const AcceptedCelebration: React.FC<AcceptedCelebrationProps> = ({
   invitation,
+  emailStatus,
   emailPreviewUrl,
   onRevisitLetter,
 }) => {
@@ -104,7 +111,9 @@ export const AcceptedCelebration: React.FC<AcceptedCelebrationProps> = ({
           <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
           <div>
             <p className="font-semibold text-rose-900">
-              Notification sent to {invitation.creatorName}
+              {emailStatus && !emailStatus.sent
+                ? `Answer saved for ${invitation.creatorName} 💕`
+                : `Notification sent to ${invitation.creatorName} 💕`}
             </p>
             <p className="text-rose-700/80">
               Answered on {formatRespondedDate(invitation.respondedAt)}

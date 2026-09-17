@@ -25,6 +25,12 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
   const [stage, setStage] = useState<RecipientStage>('envelope');
   const [isSubmittingAccept, setIsSubmittingAccept] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{
+    sent: boolean;
+    provider?: string;
+    error?: string;
+    code?: string;
+  } | undefined>(undefined);
   const [emailPreviewUrl, setEmailPreviewUrl] = useState<string | undefined>(undefined);
 
   const fetchInvitationData = useCallback(async () => {
@@ -61,8 +67,11 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
       if (res.invitation) {
         setInvitation(res.invitation);
       }
-      if (res.emailStatus?.previewUrl) {
-        setEmailPreviewUrl(res.emailStatus.previewUrl);
+      if (res.emailStatus) {
+        setEmailStatus(res.emailStatus);
+        if (res.emailStatus.previewUrl) {
+          setEmailPreviewUrl(res.emailStatus.previewUrl);
+        }
       }
       setStage('accepted');
     } catch (err: unknown) {
@@ -236,6 +245,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
           <AcceptedCelebration
             key="celebration"
             invitation={invitation}
+            emailStatus={emailStatus}
             emailPreviewUrl={emailPreviewUrl}
             onRevisitLetter={() => setStage('letter')}
           />

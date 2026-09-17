@@ -48,10 +48,18 @@ export interface AcceptInvitationResponse {
   success: boolean;
   invitation: PublicInvitation;
   message?: string;
+  status?: 'ACCEPTED_AND_NOTIFIED' | 'ACCEPTED_EMAIL_FAILED';
   emailStatus?: {
     sent: boolean;
+    provider?: string;
+    error?: string;
+    code?: string;
+    statusCode?: number;
+    messageId?: string;
     previewUrl?: string;
     note?: string;
   };
   error?: string;
+  code?: 'NOT_FOUND' | 'INVALID_ID' | 'DB_ERROR' | 'ALREADY_ACCEPTED' | 'RESEND_ERROR' | string;
+  alreadyAccepted?: boolean;
 }

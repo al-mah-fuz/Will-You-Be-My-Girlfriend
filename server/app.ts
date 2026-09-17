@@ -267,6 +267,7 @@ app.post(
         return res.status(200).json({
           success: false,
           alreadyAccepted: true,
+          code: 'ALREADY_ACCEPTED',
           message: 'This invitation has already received an answer 💕',
           invitation: toPublicInvitation(existing),
         });
@@ -274,23 +275,45 @@ app.post(
 
       const result = await acceptInvitation(id);
       if (!result.success || !result.invitation) {
-        return res.status(400).json({
+        return res.status(500).json({
           success: false,
-          error: 'Failed to record acceptance.',
+          error: 'Database error: failed to record acceptance in database.',
+          code: 'DB_ERROR',
         });
       }
 
-      // Trigger email dispatch in background (with result reporting)
-      let emailStatus = { sent: false };
+      // Dispatch email notification to the creator
+      let emailStatus: {
+        sent: boolean;
+        provider?: 'resend' | 'smtp' | 'ethereal' | 'console' | 'none';
+        error?: string;
+        code?: string;
+        statusCode?: number;
+        messageId?: string;
+      } = { sent: false, provider: 'none' };
+
       try {
         emailStatus = await sendAcceptanceNotification(result.invitation);
       } catch (emailErr) {
-        console.error('Failed to send acceptance notification email:', emailErr);
+        const errorMsg = emailErr instanceof Error ? emailErr.message : 'Unknown email dispatch failure';
+        console.error('Failed to send acceptance notification email:', errorMsg);
+        emailStatus = {
+          sent: false,
+          provider: 'resend',
+          code: 'NETWORK_ERROR',
+          error: errorMsg,
+        };
       }
+
+      const status = emailStatus.sent ? 'ACCEPTED_AND_NOTIFIED' : 'ACCEPTED_EMAIL_FAILED';
+      const message = emailStatus.sent
+        ? 'Acceptance recorded and owner notified via email! 💕'
+        : 'Acceptance recorded, but notification email could not be delivered.';
 
       return res.json({
         success: true,
-        message: 'Acceptance recorded successfully!',
+        status,
+        message,
         invitation: toPublicInvitation(result.invitation),
         emailStatus,
       });
@@ -298,7 +321,8 @@ app.post(
       console.error('Error accepting invitation:', err);
       return res.status(500).json({
         success: false,
-        error: 'Unable to submit response. Please try again.',
+        error: 'Database or server error while submitting response. Please try again.',
+        code: 'DB_ERROR',
       });
     }
   }

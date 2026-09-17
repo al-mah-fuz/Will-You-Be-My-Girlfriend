@@ -5,7 +5,10 @@ export interface SendEmailResult {
   sent: boolean;
   previewUrl?: string;
   error?: string;
-  provider?: 'resend' | 'smtp' | 'ethereal' | 'console';
+  code?: 'RESEND_ERROR' | 'MISSING_API_KEY' | 'SMTP_ERROR' | 'NETWORK_ERROR' | 'INVALID_DATA';
+  statusCode?: number;
+  messageId?: string;
+  provider?: 'resend' | 'smtp' | 'ethereal' | 'console' | 'none';
 }
 
 /**
@@ -71,19 +74,37 @@ export async function sendAcceptanceNotification(invitation: Invitation): Promis
     </html>
   `;
 
+  // Validate creator email address
+  if (!creatorEmail || !creatorEmail.trim()) {
+    console.error('[Email] Cannot send acceptance notification: creator email is missing.');
+    return {
+      sent: false,
+      provider: 'none',
+      code: 'INVALID_DATA',
+      error: 'Creator email address is missing.',
+    };
+  }
+
+  const targetEmail = creatorEmail.trim().toLowerCase();
+
   // 1. Try Resend if configured
-  if (process.env.RESEND_API_KEY) {
+  if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
+    const apiKey = process.env.RESEND_API_KEY.trim();
+    const fromAddress =
+      process.env.RESEND_FROM ||
+      process.env.SMTP_FROM ||
+      'Will You Be My Girlfriend? <onboarding@resend.dev>';
+
     try {
-      const fromAddress = process.env.SMTP_FROM || 'Will You Be My Girlfriend? <onboarding@resend.dev>';
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           from: fromAddress,
-          to: [creatorEmail],
+          to: [targetEmail],
           subject,
           text: textBody,
           html: htmlBody,
@@ -91,14 +112,40 @@ export async function sendAcceptanceNotification(invitation: Invitation): Promis
       });
 
       if (res.ok) {
-        console.log(`[Email] Acceptance sent via Resend to ${creatorEmail}`);
-        return { sent: true, provider: 'resend' };
+        const resData = (await res.json().catch(() => ({}))) as { id?: string };
+        console.log(`[Email] Acceptance sent via Resend to ${targetEmail} (id: ${resData.id || 'delivered'})`);
+        return {
+          sent: true,
+          provider: 'resend',
+          messageId: resData.id,
+        };
       } else {
         const errorText = await res.text();
-        console.warn(`[Email] Resend API error: ${errorText}. Falling back...`);
+        let parsedMessage = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          parsedMessage = parsed.message || parsed.error || errorText;
+        } catch {}
+
+        console.error(`[Email] Resend API error (HTTP ${res.status}): ${parsedMessage}`);
+
+        return {
+          sent: false,
+          provider: 'resend',
+          statusCode: res.status,
+          code: 'RESEND_ERROR',
+          error: `Resend API error (HTTP ${res.status}): ${parsedMessage}`,
+        };
       }
     } catch (err: unknown) {
-      console.warn('[Email] Resend delivery error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Network error during Resend request';
+      console.error('[Email] Resend network error:', errMsg);
+      return {
+        sent: false,
+        provider: 'resend',
+        code: 'NETWORK_ERROR',
+        error: `Network error connecting to Resend: ${errMsg}`,
+      };
     }
   }
 
@@ -117,59 +164,32 @@ export async function sendAcceptanceNotification(invitation: Invitation): Promis
 
       await transporter.sendMail({
         from: process.env.SMTP_FROM || `"Will You Be My Girlfriend?" <${process.env.SMTP_USER}>`,
-        to: creatorEmail,
+        to: targetEmail,
         subject,
         text: textBody,
         html: htmlBody,
       });
 
-      console.log(`[Email] Acceptance sent via custom SMTP to ${creatorEmail}`);
+      console.log(`[Email] Acceptance sent via custom SMTP to ${targetEmail}`);
       return { sent: true, provider: 'smtp' };
     } catch (err: unknown) {
-      console.warn('[Email] Custom SMTP error:', err);
+      const errMsg = err instanceof Error ? err.message : 'SMTP delivery failed';
+      console.error('[Email] Custom SMTP error:', errMsg);
+      return {
+        sent: false,
+        provider: 'smtp',
+        code: 'SMTP_ERROR',
+        error: `Custom SMTP error: ${errMsg}`,
+      };
     }
   }
 
-  // 3. Fallback: Ethereal test inbox for development & testing
-  try {
-    const testAccount = await nodemailer.createTestAccount();
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from: '"Will You Be My Girlfriend?" <noreply@willyoubemygirlfriend.app>',
-      to: creatorEmail,
-      subject,
-      text: textBody,
-      html: htmlBody,
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info) || undefined;
-    console.log(`[Email] Acceptance simulated for testing via Ethereal to ${creatorEmail}`);
-    if (previewUrl) {
-      console.log(`[Email Preview URL]: ${previewUrl}`);
-    }
-
-    return {
-      sent: true,
-      previewUrl,
-      provider: 'ethereal',
-    };
-  } catch (err: unknown) {
-    console.warn('[Email] Ethereal fallback error:', err);
-    // Console fallback
-    console.log(`\n==== [EMAIL DISPATCH TO ${creatorEmail}] ====\nSubject: ${subject}\n\n${textBody}\n====================================\n`);
-    return {
-      sent: true,
-      provider: 'console',
-      error: 'Credentials not configured, logged to console',
-    };
-  }
+  // 3. Fallback when neither Resend nor SMTP is configured
+  console.error('[Email] Delivery failed: RESEND_API_KEY is not configured in server environment variables.');
+  return {
+    sent: false,
+    provider: 'none',
+    code: 'MISSING_API_KEY',
+    error: 'RESEND_API_KEY is not configured on the server. Please add RESEND_API_KEY to your environment variables.',
+  };
 }

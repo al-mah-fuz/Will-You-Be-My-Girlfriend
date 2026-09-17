@@ -216,14 +216,25 @@
     "respondedAt": null
   },
   {
-    "id": "WU8aeA",
-    "invitationId": "WU8aeA",
-    "creatorName": "DevTester",
-    "recipientName": "Sweetheart",
-    "creatorEmail": "test@love.com",
-    "personalMessage": "You make my world shine.",
-    "responseStatus": "pending",
-    "createdAt": "2026-09-17T09:03:53.686Z",
-    "respondedAt": null
+    "id": "ExR8jk",
+    "invitationId": "ExR8jk",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "senkuhustle@gmail.com",
+    "personalMessage": "Love you forever",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-17T09:25:27.823Z",
+    "respondedAt": "2026-09-17T09:25:27.905Z"
+  },
+  {
+    "id": "ExR8jk",
+    "invitationId": "ExR8jk",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "senkuhustle@gmail.com",
+    "personalMessage": "Love you forever",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-17T09:25:27.823Z",
+    "respondedAt": "2026-09-17T09:25:27.905Z"
   }
 ]
