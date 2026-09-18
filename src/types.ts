@@ -31,6 +31,12 @@ export interface CreateInvitationInput {
   personalMessage?: string;
 }
 
+export interface EmailJsConfig {
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -59,7 +65,9 @@ export interface AcceptInvitationResponse {
     previewUrl?: string;
     note?: string;
   };
+  emailConfig?: EmailJsConfig | null;
+  targetEmail?: string;
   error?: string;
-  code?: 'NOT_FOUND' | 'INVALID_ID' | 'DB_ERROR' | 'ALREADY_ACCEPTED' | 'RESEND_ERROR' | string;
+  code?: 'NOT_FOUND' | 'INVALID_ID' | 'DB_ERROR' | 'ALREADY_ACCEPTED' | 'EMAILJS_ERROR' | string;
   alreadyAccepted?: boolean;
 }

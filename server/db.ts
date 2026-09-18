@@ -2,11 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { Invitation, PublicInvitation, CreateInvitationInput } from '../src/types.js';
+import { Invitation, PublicInvitation, CreateInvitationInput, EmailJsConfig } from '../src/types.js';
 
 // In-memory cache for fast lookups and atomic checks
 const invitationsMap = new Map<string, Invitation>();
 let isInitialized = false;
+
+// EmailJS settings cache
+let cachedEmailJsSettings: EmailJsConfig | null = null;
 
 // Determine writable directory for file-based persistence
 function resolveWritableDataDir(): string {
@@ -433,4 +436,136 @@ export async function acceptInvitation(id: string): Promise<{
     success: true,
     invitation: inv,
   };
+}
+
+const SETTINGS_FILE = path.join(WRITABLE_DATA_DIR, 'emailjs_settings.json');
+
+/**
+ * Retrieve saved EmailJS configuration
+ */
+export async function getEmailJsSettings(): Promise<EmailJsConfig | null> {
+  // 1. Check in-memory cache
+  if (cachedEmailJsSettings && cachedEmailJsSettings.serviceId && cachedEmailJsSettings.templateId && cachedEmailJsSettings.publicKey) {
+    return cachedEmailJsSettings;
+  }
+
+  // 2. Check disk file
+  const candidateFiles = [
+    SETTINGS_FILE,
+    path.join(process.cwd(), 'data', 'emailjs_settings.json'),
+    path.join(os.tmpdir(), 'emailjs_settings.json'),
+  ];
+
+  for (const filePath of candidateFiles) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        if (raw.trim()) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            const config: EmailJsConfig = {
+              serviceId: String(parsed.serviceId || parsed.service_id || '').trim(),
+              templateId: String(parsed.templateId || parsed.template_id || '').trim(),
+              publicKey: String(parsed.publicKey || parsed.public_key || '').trim(),
+            };
+            if (config.serviceId && config.templateId && config.publicKey) {
+              cachedEmailJsSettings = config;
+              return config;
+            }
+          }
+        }
+      }
+    } catch {
+      // Continue to next file
+    }
+  }
+
+  // 3. Fallback to Cloud KV if available
+  const kv = getKvConfig();
+  if (kv) {
+    try {
+      const res = await fetch(kv.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${kv.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(['GET', 'emailjs_settings']),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.result) {
+          const parsed = typeof json.result === 'string' ? JSON.parse(json.result) : json.result;
+          if (parsed && typeof parsed === 'object') {
+            const config: EmailJsConfig = {
+              serviceId: String(parsed.serviceId || parsed.service_id || '').trim(),
+              templateId: String(parsed.templateId || parsed.template_id || '').trim(),
+              publicKey: String(parsed.publicKey || parsed.public_key || '').trim(),
+            };
+            if (config.serviceId && config.templateId && config.publicKey) {
+              cachedEmailJsSettings = config;
+              return config;
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore KV error
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Persist EmailJS configuration
+ */
+export async function saveEmailJsSettings(config: EmailJsConfig): Promise<EmailJsConfig> {
+  const cleanConfig: EmailJsConfig = {
+    serviceId: (config.serviceId || '').trim(),
+    templateId: (config.templateId || '').trim(),
+    publicKey: (config.publicKey || '').trim(),
+  };
+
+  cachedEmailJsSettings = cleanConfig;
+
+  // 1. Write to writable settings file
+  try {
+    if (!fs.existsSync(WRITABLE_DATA_DIR)) {
+      fs.mkdirSync(WRITABLE_DATA_DIR, { recursive: true });
+    }
+    await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(cleanConfig, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Could not write to SETTINGS_FILE:', err);
+  }
+
+  // 2. Also write to process.cwd()/data/emailjs_settings.json if writable
+  try {
+    const localDir = path.join(process.cwd(), 'data');
+    if (fs.existsSync(localDir)) {
+      const localFile = path.join(localDir, 'emailjs_settings.json');
+      await fs.promises.writeFile(localFile, JSON.stringify(cleanConfig, null, 2), 'utf-8');
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  // 3. Write to Cloud KV if available
+  const kv = getKvConfig();
+  if (kv) {
+    try {
+      await fetch(kv.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${kv.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(['SET', 'emailjs_settings', JSON.stringify(cleanConfig)]),
+      });
+    } catch (err) {
+      console.warn('Could not sync EmailJS settings to KV:', err);
+    }
+  }
+
+  return cleanConfig;
 }

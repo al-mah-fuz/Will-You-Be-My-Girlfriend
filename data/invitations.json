@@ -246,5 +246,38 @@
     "responseStatus": "accepted",
     "createdAt": "2026-09-17T10:07:15.422Z",
     "respondedAt": "2026-09-17T10:07:15.524Z"
+  },
+  {
+    "id": "tS9GyY",
+    "invitationId": "tS9GyY",
+    "creatorName": "DiagnosticTester",
+    "recipientName": "Beloved",
+    "creatorEmail": "person@yahoo.com",
+    "personalMessage": "Diagnostic test",
+    "responseStatus": "pending",
+    "createdAt": "2026-09-17T10:30:33.474Z",
+    "respondedAt": null
+  },
+  {
+    "id": "Ttj8Yj",
+    "invitationId": "Ttj8Yj",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "romeo_test@gmail.com",
+    "personalMessage": "Be mine forever!",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-18T10:08:15.458Z",
+    "respondedAt": "2026-09-18T10:08:15.465Z"
+  },
+  {
+    "id": "Ttj8Yj",
+    "invitationId": "Ttj8Yj",
+    "creatorName": "Romeo",
+    "recipientName": "Juliet",
+    "creatorEmail": "romeo_test@gmail.com",
+    "personalMessage": "Be mine forever!",
+    "responseStatus": "accepted",
+    "createdAt": "2026-09-18T10:08:15.458Z",
+    "respondedAt": "2026-09-18T10:08:15.465Z"
   }
 ]

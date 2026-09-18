@@ -6,8 +6,9 @@ import {
   getPublicInvitation,
   acceptInvitation,
   toPublicInvitation,
+  getEmailJsSettings,
+  saveEmailJsSettings,
 } from './db.js';
-import { sendAcceptanceNotification } from './email.js';
 import { cleanBaseUrl, isVercelPreviewHost } from './url.js';
 
 // Email validator regex
@@ -291,40 +292,21 @@ app.post(
         });
       }
 
-      // Dispatch email notification to the creator
-      let emailStatus: {
-        sent: boolean;
-        provider?: 'resend' | 'smtp' | 'ethereal' | 'console' | 'none';
-        error?: string;
-        code?: string;
-        statusCode?: number;
-        messageId?: string;
-      } = { sent: false, provider: 'none' };
-
-      try {
-        emailStatus = await sendAcceptanceNotification(result.invitation);
-      } catch (emailErr) {
-        const errorMsg = emailErr instanceof Error ? emailErr.message : 'Unknown email dispatch failure';
-        console.error('Failed to send acceptance notification email:', errorMsg);
-        emailStatus = {
-          sent: false,
-          provider: 'resend',
-          code: 'NETWORK_ERROR',
-          error: errorMsg,
-        };
-      }
-
-      const status = emailStatus.sent ? 'ACCEPTED_AND_NOTIFIED' : 'ACCEPTED_EMAIL_FAILED';
-      const message = emailStatus.sent
-        ? 'Acceptance recorded and owner notified via email! 💕'
-        : 'Acceptance recorded, but notification email could not be delivered.';
+      // Retrieve saved EmailJS configuration
+      const emailConfig = await getEmailJsSettings();
 
       return res.json({
         success: true,
-        status,
-        message,
+        message: 'Acceptance recorded! 💕',
         invitation: toPublicInvitation(result.invitation),
-        emailStatus,
+        targetEmail: result.invitation.creatorEmail,
+        emailConfig: emailConfig
+          ? {
+              serviceId: emailConfig.serviceId,
+              templateId: emailConfig.templateId,
+              publicKey: emailConfig.publicKey,
+            }
+          : null,
       });
     } catch (err: unknown) {
       console.error('Error accepting invitation:', err);
@@ -336,6 +318,46 @@ app.post(
     }
   }
 );
+
+// 4. EmailJS Configuration endpoints (Settings)
+app.get(['/api/settings/emailjs', '/settings/emailjs'], async (req, res) => {
+  try {
+    const config = await getEmailJsSettings();
+    return res.json({
+      success: true,
+      config: config || { serviceId: '', templateId: '', publicKey: '' },
+    });
+  } catch (err) {
+    console.error('Error fetching EmailJS settings:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve EmailJS settings.',
+    });
+  }
+});
+
+app.post(['/api/settings/emailjs', '/settings/emailjs'], async (req, res) => {
+  try {
+    const { serviceId, templateId, publicKey } = req.body || {};
+    const saved = await saveEmailJsSettings({
+      serviceId: typeof serviceId === 'string' ? serviceId.trim() : '',
+      templateId: typeof templateId === 'string' ? templateId.trim() : '',
+      publicKey: typeof publicKey === 'string' ? publicKey.trim() : '',
+    });
+
+    return res.json({
+      success: true,
+      message: 'EmailJS settings saved successfully.',
+      config: saved,
+    });
+  } catch (err) {
+    console.error('Error saving EmailJS settings:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to save EmailJS settings.',
+    });
+  }
+});
 
 // JSON fallback for unknown /api routes
 app.use('/api/*', (req, res) => {

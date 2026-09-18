@@ -5,6 +5,7 @@ import { LandingPage } from './components/LandingPage';
 import { CreateInvitationForm } from './components/CreateInvitationForm';
 import { SuccessPage } from './components/SuccessPage';
 import { RecipientView } from './components/RecipientView';
+import { EmailJsSettingsModal } from './components/EmailJsSettingsModal';
 import { PublicInvitation } from './types';
 import { Heart } from 'lucide-react';
 
@@ -15,6 +16,7 @@ export default function App() {
   const [activeInvitationId, setActiveInvitationId] = useState<string | null>(null);
   const [createdInvitation, setCreatedInvitation] = useState<PublicInvitation | null>(null);
   const [shareUrl, setShareUrl] = useState<string>('');
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Handle URL route detection on mount & popstate
   const syncRouteFromUrl = () => {
@@ -48,6 +50,11 @@ export default function App() {
       setActiveInvitationId(decodeURIComponent(queryInvite.trim()));
       setCurrentView('recipient');
       return;
+    }
+
+    // Secret admin access for the site owner: ?admin=emailjs or ?settings=emailjs or #settings
+    if (searchParams.get('admin') === 'emailjs' || searchParams.get('settings') === 'emailjs' || hash === '#settings') {
+      setIsSettingsOpen(true);
     }
 
     // Default to landing
@@ -129,6 +136,12 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* EmailJS Configuration Modal */}
+      <EmailJsSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
 
       {/* Footer */}
       <footer

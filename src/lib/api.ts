@@ -3,6 +3,7 @@ import {
   CreateInvitationResponse,
   PublicInvitation,
   AcceptInvitationResponse,
+  EmailJsConfig,
 } from '../types';
 
 /**
@@ -119,4 +120,29 @@ export async function acceptInvitation(id: string): Promise<AcceptInvitationResp
   }
 
   return parseJsonResponse<AcceptInvitationResponse>(res, 'Failed to submit acceptance.');
+}
+
+export async function getEmailJsSettingsApi(): Promise<EmailJsConfig> {
+  const res = await fetch('/api/settings/emailjs');
+  const data = await parseJsonResponse<{ success: boolean; config: EmailJsConfig }>(
+    res,
+    'Failed to load EmailJS settings.'
+  );
+  return data.config || { serviceId: '', templateId: '', publicKey: '' };
+}
+
+export async function saveEmailJsSettingsApi(config: EmailJsConfig): Promise<EmailJsConfig> {
+  const res = await fetch('/api/settings/emailjs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  });
+
+  const data = await parseJsonResponse<{ success: boolean; config: EmailJsConfig }>(
+    res,
+    'Failed to save EmailJS settings.'
+  );
+  return data.config;
 }

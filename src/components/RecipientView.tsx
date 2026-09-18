@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Heart, RefreshCw, AlertCircle, Home, Loader2, Sparkles } from 'lucide-react';
 import { PublicInvitation } from '../types';
 import { getInvitation, acceptInvitation } from '../lib/api';
+import { sendEmailJsAcceptanceNotification } from '../lib/emailjs';
 import { Envelope } from './Envelope';
 import { LoveLetter } from './LoveLetter';
 import { QuestionCard } from './QuestionCard';
@@ -64,15 +65,44 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
     setAcceptError(null);
     try {
       const res = await acceptInvitation(invitation.id);
-      if (res.invitation) {
-        setInvitation(res.invitation);
-      }
-      if (res.emailStatus) {
+      const updatedInv = res.invitation || invitation;
+      setInvitation(updatedInv);
+
+      // If EmailJS config and target email are present, send notification via EmailJS
+      if (res.emailConfig && res.targetEmail) {
+        try {
+          const emailJsResult = await sendEmailJsAcceptanceNotification({
+            config: res.emailConfig,
+            invitation: updatedInv,
+            targetEmail: res.targetEmail,
+          });
+
+          setEmailStatus({
+            sent: emailJsResult.sent,
+            provider: 'emailjs',
+            error: emailJsResult.error,
+            code: emailJsResult.code,
+          });
+        } catch (emailErr) {
+          console.error('EmailJS dispatch failed:', emailErr);
+          setEmailStatus({
+            sent: false,
+            provider: 'emailjs',
+            error: emailErr instanceof Error ? emailErr.message : 'Failed to send notification via EmailJS',
+          });
+        }
+      } else if (res.emailStatus) {
         setEmailStatus(res.emailStatus);
         if (res.emailStatus.previewUrl) {
           setEmailPreviewUrl(res.emailStatus.previewUrl);
         }
+      } else {
+        setEmailStatus({
+          sent: true,
+          provider: 'system',
+        });
       }
+
       setStage('accepted');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not submit your answer. Please try again.';
