@@ -74,6 +74,12 @@ export const CreateInvitationForm: React.FC<CreateInvitationFormProps> = ({
       const response = await createInvitation(formData);
       if (response.success && response.invitation) {
         const finalShareUrl = buildPublicShareUrl(response.invitation.id, response.shareUrl);
+        console.log(
+          `[DIAGNOSTIC - CREATION] The invitation ID generated during creation: "${response.invitation.id}"`
+        );
+        console.log(
+          `[DIAGNOSTIC - CREATION] The exact invitation URL generated: "${finalShareUrl}" (Contains ID: "${response.invitation.id}")`
+        );
         onSuccess(response.invitation, finalShareUrl);
       } else {
         setServerError(response.error || 'Could not create invitation. Please try again.');

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, RefreshCw, AlertCircle, Home, Loader2, Sparkles } from 'lucide-react';
+import { Heart, RefreshCw, AlertCircle, Home, Loader2, Sparkles, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { PublicInvitation } from '../types';
-import { getInvitation, acceptInvitation } from '../lib/api';
+import { getInvitation, acceptInvitation, ApiError, ApiDiagnostic } from '../lib/api';
 import { sendEmailJsAcceptanceNotification } from '../lib/emailjs';
 import { Envelope } from './Envelope';
 import { LoveLetter } from './LoveLetter';
@@ -23,6 +23,13 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
   const [invitation, setInvitation] = useState<PublicInvitation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<{
+    status: number;
+    code: string;
+    message: string;
+    diagnostic?: ApiDiagnostic;
+  } | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(true);
   const [stage, setStage] = useState<RecipientStage>('envelope');
   const [isSubmittingAccept, setIsSubmittingAccept] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
@@ -37,6 +44,11 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
   const fetchInvitationData = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
+    setErrorDetails(null);
+
+    console.log(
+      `[DIAGNOSTIC - RECIPIENT PAGE] The exact invitation ID received by the recipient page: "${invitationId}" | Browser URL: "${window.location.href}"`
+    );
 
     try {
       const data = await getInvitation(invitationId);
@@ -47,8 +59,24 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
         setStage('envelope');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to load this invitation.';
-      setErrorMessage(msg);
+      console.error('[DIAGNOSTIC - RECIPIENT PAGE ERROR] Error loading invitation:', err);
+      if (err instanceof ApiError) {
+        setErrorDetails({
+          status: err.status,
+          code: err.code,
+          message: err.message,
+          diagnostic: err.diagnostic,
+        });
+        setErrorMessage(err.message);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Unable to load this invitation.';
+        setErrorDetails({
+          status: 0,
+          code: 'UNEXPECTED_ERROR',
+          message: msg,
+        });
+        setErrorMessage(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -136,40 +164,46 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
 
   // 2. Error State (Differentiated error handling)
   if (errorMessage || !invitation) {
-    const errLower = (errorMessage || '').toLowerCase();
-    const isNotFound = errLower.includes('not found') || errLower.includes("doesn't exist");
-    const isInvalidId = errLower.includes('invalid') || errLower.includes('missing');
-    const isPermission =
-      errLower.includes('permission') ||
-      errLower.includes('access denied') ||
-      errLower.includes('unauthorized');
-    const isDbOrNetwork =
-      errLower.includes('database') ||
-      errLower.includes('server') ||
-      errLower.includes('network') ||
-      errLower.includes('unavailable') ||
-      errLower.includes('connection') ||
-      errLower.includes('temporarily');
+    const status = errorDetails?.status ?? 0;
+    const code = errorDetails?.code ?? '';
+    const diag = errorDetails?.diagnostic;
 
+    const isNotFound = status === 404 || code === 'NOT_FOUND';
+    const isInvalidId =
+      status === 400 || code === 'INVALID_ID' || !invitationId || invitationId.trim().length === 0;
+    const isPermission = status === 403 || status === 401 || code === 'PERMISSION_DENIED';
+    const isDbServer = status >= 500 || code === 'DB_ERROR';
+    const isNetwork = status === 0 || code === 'NETWORK_FAILURE';
+
+    let errorCategoryBadge = 'System Error';
     let errorTitle = 'Unable to Load Invitation';
     let errorDescription =
       errorMessage || 'Something went wrong while retrieving the invitation. Please try again.';
 
     if (isNotFound) {
-      errorTitle = 'Invitation Not Found 💔';
-      errorDescription =
-        'We could not find an invitation with this link. Please check that the URL was copied completely or ask the sender to resend it.';
+      errorCategoryBadge = 'HTTP 404 • Not Found in Database';
+      errorTitle = 'Invitation Genuinely Not Found 💔';
+      errorDescription = `No invitation matching ID "${invitationId || 'unknown'}" exists in the database. Please verify the URL was copied completely or create a new invitation.`;
     } else if (isInvalidId) {
-      errorTitle = 'Invalid Invitation Link';
+      errorCategoryBadge = 'HTTP 400 • Invalid / Missing ID';
+      errorTitle = 'Invalid or Missing Invitation Link ⚠️';
       errorDescription =
-        'The invitation link appears to be incomplete or malformed. Please check the URL.';
+        'The link URL is missing a valid invitation identifier. Please verify the link.';
     } else if (isPermission) {
-      errorTitle = 'Access Denied';
-      errorDescription = 'You do not have permission to view this invitation.';
-    } else if (isDbOrNetwork) {
-      errorTitle = 'Connection Issue';
+      errorCategoryBadge = 'HTTP 403 • Database Permission Error';
+      errorTitle = 'Database Permission Denied 🔒';
       errorDescription =
-        'Could not connect to the database. Please check your connection and try again.';
+        'Database security rules or permissions prevented reading this invitation record.';
+    } else if (isDbServer) {
+      errorCategoryBadge = `HTTP ${status || 500} • Database Server Error`;
+      errorTitle = 'Database / Server Error ⚡';
+      errorDescription =
+        'A database query exception or server error occurred while retrieving this invitation.';
+    } else if (isNetwork) {
+      errorCategoryBadge = 'Network / Connection Failure';
+      errorTitle = 'Network Connection Failed 🌐';
+      errorDescription =
+        'Unable to reach the server or database. Please check your internet connection and try again.';
     }
 
     return (
@@ -177,22 +211,85 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
         id="recipient-error-state"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md mx-auto px-4 py-12 text-center"
+        className="w-full max-w-xl mx-auto px-4 py-8 text-center"
       >
-        <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-rose-100 p-8 shadow-pink-glow">
-          <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-500 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-8 h-8" />
+        <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-rose-100 p-6 sm:p-8 shadow-pink-glow text-left">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide uppercase bg-rose-100/80 text-rose-700 border border-rose-200">
+                {errorCategoryBadge}
+              </span>
+              <h2 className="font-romantic text-2xl font-bold text-rose-950 mt-1">{errorTitle}</h2>
+            </div>
           </div>
 
-          <h2 className="font-romantic text-2xl font-bold text-rose-950 mb-2">{errorTitle}</h2>
+          <p className="text-sm text-rose-900/80 leading-relaxed mb-6">{errorDescription}</p>
 
-          <p className="text-sm text-rose-800/70 mb-6">{errorDescription}</p>
+          {/* Diagnostic Log Panel */}
+          <div
+            id="diagnostic-log-panel"
+            className="mb-6 rounded-2xl border border-slate-200 bg-slate-900 text-slate-100 text-xs overflow-hidden shadow-sm"
+          >
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+              className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-800 hover:bg-slate-750 text-slate-300 font-mono transition-colors cursor-pointer border-b border-slate-700/60"
+            >
+              <span className="flex items-center gap-2 font-medium text-slate-200">
+                <Terminal className="w-3.5 h-3.5 text-rose-400" />
+                Diagnostic Debug Information
+              </span>
+              {showDiagnostics ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {showDiagnostics && (
+              <div className="p-4 font-mono space-y-2 text-[11px] leading-relaxed select-text">
+                <div className="flex justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-slate-400">Queried Invitation ID:</span>
+                  <span className="font-bold text-rose-300">{invitationId || '(empty)'}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-slate-400">HTTP Status Code:</span>
+                  <span className="font-bold text-amber-300">{status || 'Network Error / 0'}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-slate-400">Error Classification:</span>
+                  <span className="text-cyan-300">{code || 'UNCLASSIFIED'}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-slate-400">Database Collection/Table:</span>
+                  <span className="text-emerald-300">
+                    {diag?.collection || 'invitations'} (File: {diag?.databaseTarget ? diag.databaseTarget.split('/').pop() : 'invitations.json'})
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-slate-400">Database Query Result:</span>
+                  <span className="text-slate-200">
+                    {isNotFound
+                      ? `0 records matched in ${diag?.totalRecordsInDatabase ?? 'storage'}`
+                      : diag?.actualDatabaseError || diag?.queryResult || 'Query failed'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Diagnostic Timestamp:</span>
+                  <span className="text-slate-500">{diag?.timestamp || new Date().toISOString()}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2 border-t border-rose-100">
             <button
               type="button"
               onClick={fetchInvitationData}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
             >
               <RefreshCw className="w-4 h-4" />
               Try Again

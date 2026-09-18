@@ -8,6 +8,7 @@ import {
   toPublicInvitation,
   getEmailJsSettings,
   saveEmailJsSettings,
+  getDatabaseDiagnosticInfo,
 } from './db.js';
 import { cleanBaseUrl, isVercelPreviewHost } from './url.js';
 
@@ -178,17 +179,40 @@ app.post(
       const baseUrl = getBaseUrl(req);
       const shareUrl = `${baseUrl}/invite/${invitation.id}`;
 
+      console.log(
+        `[DIAGNOSTIC - API CREATION] The invitation ID generated during creation: "${invitation.id}"`
+      );
+      console.log(
+        `[DIAGNOSTIC - API CREATION] The exact invitation URL generated: "${shareUrl}"`
+      );
+
+      const dbInfo = getDatabaseDiagnosticInfo();
+
       return res.status(201).json({
         success: true,
         invitation: toPublicInvitation(invitation),
         shareUrl,
+        diagnostic: {
+          invitationId: invitation.id,
+          shareUrl,
+          collection: dbInfo.collection,
+          databaseTarget: dbInfo.dbFilePath,
+          totalRecords: dbInfo.totalRecords,
+          timestamp: new Date().toISOString(),
+        },
       });
     } catch (err: unknown) {
-      console.error('Error creating invitation:', err);
+      console.error('[DIAGNOSTIC - API CREATION ERROR] Error creating invitation:', err);
       const message = err instanceof Error ? err.message : 'Failed to create invitation. Please try again.';
       return res.status(500).json({
         success: false,
         error: message,
+        code: 'CREATION_FAILED',
+        diagnostic: {
+          error: message,
+          collection: 'invitations',
+          timestamp: new Date().toISOString(),
+        },
       });
     }
   }
@@ -207,36 +231,92 @@ app.get(
     '/invitation',
   ],
   async (req, res) => {
-    try {
-      const id = extractInvitationId(req);
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid or missing invitation link. Please verify the URL.',
-          code: 'INVALID_ID',
-        });
-      }
+    const id = extractInvitationId(req);
+    const dbInfo = getDatabaseDiagnosticInfo();
 
+    console.log(
+      `[DIAGNOSTIC - API QUERY] Request received for invitation ID: "${id}" | Original URL: "${req.originalUrl}" | Method: ${req.method} | Params: ${JSON.stringify(req.params)} | Query: ${JSON.stringify(req.query)}`
+    );
+
+    if (!id) {
+      console.warn(
+        `[DIAGNOSTIC - API QUERY BAD REQUEST] Missing or invalid ID parameter in URL: "${req.originalUrl}"`
+      );
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or missing invitation ID (HTTP 400). Please check the link URL.',
+        code: 'INVALID_ID',
+        diagnostic: {
+          status: 400,
+          receivedId: id,
+          collection: dbInfo.collection,
+          databaseTarget: dbInfo.dbFilePath,
+          url: req.originalUrl,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    try {
+      console.log(
+        `[DIAGNOSTIC - API DB READ] Querying collection: "${dbInfo.collection}" at "${dbInfo.dbFilePath}" for ID: "${id}"`
+      );
       const pubInv = await getPublicInvitation(id);
 
       if (!pubInv) {
+        console.warn(
+          `[DIAGNOSTIC - API QUERY RESULT 404] Invitation "${id}" genuinely not found in collection "${dbInfo.collection}". Total records in DB: ${dbInfo.totalRecords}`
+        );
         return res.status(404).json({
           success: false,
-          error: 'Invitation not found. Please check your link or ask the sender to share it again.',
+          error: `Invitation genuinely does not exist in database (HTTP 404). ID "${id}" was not found.`,
           code: 'NOT_FOUND',
+          diagnostic: {
+            status: 404,
+            queriedId: id,
+            collection: dbInfo.collection,
+            databaseTarget: dbInfo.dbFilePath,
+            totalRecordsInDatabase: dbInfo.totalRecords,
+            queryResult: null,
+            timestamp: new Date().toISOString(),
+          },
         });
       }
+
+      console.log(
+        `[DIAGNOSTIC - API QUERY RESULT 200] SUCCESS: Found invitation "${id}" for recipient "${pubInv.recipientName}" (Status: ${pubInv.responseStatus})`
+      );
 
       return res.json({
         success: true,
         invitation: pubInv,
+        diagnostic: {
+          status: 200,
+          queriedId: id,
+          collection: dbInfo.collection,
+          databaseTarget: dbInfo.dbFilePath,
+          queryResult: 'FOUND',
+          timestamp: new Date().toISOString(),
+        },
       });
     } catch (err: unknown) {
-      console.error('Error fetching invitation:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[DIAGNOSTIC - API DATABASE ERROR 500] Database error querying invitation "${id}":`,
+        err
+      );
       return res.status(500).json({
         success: false,
-        error: 'Database or server error while retrieving invitation. Please try again.',
+        error: `Database or server error while retrieving invitation (HTTP 500): ${errMsg}`,
         code: 'DB_ERROR',
+        diagnostic: {
+          status: 500,
+          queriedId: id,
+          collection: dbInfo.collection,
+          databaseTarget: dbInfo.dbFilePath,
+          actualDatabaseError: errMsg,
+          timestamp: new Date().toISOString(),
+        },
       });
     }
   }

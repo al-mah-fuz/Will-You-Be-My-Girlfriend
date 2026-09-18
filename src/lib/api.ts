@@ -6,68 +6,102 @@ import {
   EmailJsConfig,
 } from '../types';
 
+export interface ApiDiagnostic {
+  status?: number;
+  queriedId?: string;
+  receivedId?: string;
+  collection?: string;
+  databaseTarget?: string;
+  totalRecordsInDatabase?: number;
+  queryResult?: any;
+  actualDatabaseError?: string;
+  timestamp?: string;
+  url?: string;
+  [key: string]: any;
+}
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  diagnostic?: ApiDiagnostic;
+
+  constructor(message: string, status: number, code: string, diagnostic?: ApiDiagnostic) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.diagnostic = diagnostic;
+  }
+}
+
 /**
  * Safely parses response JSON and provides explicit HTTP status diagnostics
- * if the server or edge returns an HTML/text error (e.g. 404/500/502/504)
+ * differentiating 404, 403, 500, 400, and network failures.
  */
 async function parseJsonResponse<T>(res: Response, defaultErrorText: string): Promise<T> {
   const contentType = res.headers.get('content-type') || '';
   const isJson = contentType.toLowerCase().includes('application/json');
 
+  let data: any = null;
   if (isJson) {
     try {
-      const data = await res.json();
-      if (!res.ok) {
-        if (data?.error) {
-          throw new Error(data.error);
-        }
-        if (data?.message) {
-          throw new Error(data.message);
-        }
-        if (res.status === 404) {
-          throw new Error('Invitation not found. Please verify your link or ask the sender to share it again.');
-        }
-        if (res.status === 400) {
-          throw new Error('Invalid or missing invitation link. Please check the URL.');
-        }
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Access denied. You do not have permission to view this invitation.');
-        }
-        if (res.status >= 500) {
-          throw new Error('Database or server error. Please try again in a few moments.');
-        }
-        throw new Error(`${defaultErrorText} (HTTP ${res.status})`);
-      }
-      return data as T;
-    } catch (err: unknown) {
-      // Re-throw known Error instances from above
-      if (err instanceof Error && !err.message.toLowerCase().includes('json')) {
-        throw err;
-      }
-      throw new Error(`Server returned malformed response (HTTP ${res.status}).`);
+      data = await res.json();
+    } catch {
+      // Non-JSON or broken JSON
     }
   }
 
-  // If the server/edge returned non-JSON
-  if (res.status === 404) {
-    throw new Error('Invitation not found. Please verify your link or ask the sender to share it again.');
-  }
-  if (res.status >= 500) {
-    throw new Error('Server or database temporarily unavailable. Please try again in a few moments.');
+  if (!res.ok) {
+    const status = res.status;
+    const diagnostic: ApiDiagnostic = (data && data.diagnostic) || {
+      status,
+      timestamp: new Date().toISOString(),
+    };
+
+    let code = (data && data.code) || 'UNKNOWN_ERROR';
+    let message = (data && (data.error || data.message)) || '';
+
+    if (status === 404) {
+      code = code === 'UNKNOWN_ERROR' ? 'NOT_FOUND' : code;
+      message =
+        message || 'Invitation genuinely does not exist in database (HTTP 404).';
+    } else if (status === 400) {
+      code = code === 'UNKNOWN_ERROR' ? 'INVALID_ID' : code;
+      message = message || 'Invalid or missing invitation ID (HTTP 400).';
+    } else if (status === 401 || status === 403) {
+      code = code === 'UNKNOWN_ERROR' ? 'PERMISSION_DENIED' : code;
+      message =
+        message || 'Database permission error: Access denied to invitation (HTTP 403).';
+    } else if (status >= 500) {
+      code = code === 'UNKNOWN_ERROR' ? 'DB_ERROR' : code;
+      message =
+        message || `Database or server error while retrieving invitation (HTTP ${status}).`;
+    } else {
+      message = message || `${defaultErrorText} (HTTP ${status})`;
+    }
+
+    throw new ApiError(message, status, code, diagnostic);
   }
 
-  const rawText = await res.text();
-  const cleanSnippet = rawText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-  const summary = cleanSnippet
-    ? (cleanSnippet.length > 120 ? `${cleanSnippet.slice(0, 120)}...` : cleanSnippet)
-    : res.statusText || 'No response details';
+  if (!data) {
+    throw new ApiError(
+      `Empty response received from server (HTTP ${res.status}).`,
+      res.status,
+      'EMPTY_RESPONSE'
+    );
+  }
 
-  throw new Error(`Unable to load invitation (HTTP ${res.status}): ${summary}`);
+  return data as T;
 }
 
 export async function createInvitation(
   input: CreateInvitationInput
 ): Promise<CreateInvitationResponse> {
+  console.log('[DIAGNOSTIC - CLIENT CREATE] Submitting creation payload to /api/invitations:', {
+    creatorName: input.creatorName,
+    recipientName: input.recipientName,
+  });
+
   const res = await fetch('/api/invitations', {
     method: 'POST',
     headers: {
@@ -76,17 +110,60 @@ export async function createInvitation(
     body: JSON.stringify(input),
   });
 
-  return parseJsonResponse<CreateInvitationResponse>(res, 'Failed to create invitation.');
+  const data = await parseJsonResponse<CreateInvitationResponse>(
+    res,
+    'Failed to create invitation.'
+  );
+
+  console.log(
+    `[DIAGNOSTIC - CLIENT CREATE RESULT] Success! Invitation ID generated: "${data.invitation.id}" | Share URL: "${data.shareUrl}"`
+  );
+  return data;
 }
 
 export async function getInvitation(id: string): Promise<PublicInvitation> {
   const cleanId = id.trim();
-  const res = await fetch(
-    `/api/invitations/${encodeURIComponent(cleanId)}?id=${encodeURIComponent(cleanId)}`
+  const requestUrl = `/api/invitations/${encodeURIComponent(cleanId)}?id=${encodeURIComponent(cleanId)}`;
+
+  console.log(
+    `[DIAGNOSTIC - CLIENT GET] Requesting invitation ID: "${cleanId}" from URL: ${requestUrl}`
   );
-  const data = await parseJsonResponse<{ success: boolean; invitation: PublicInvitation }>(
-    res,
-    'Invitation not found. Please verify the invitation link.'
+
+  let res: Response;
+  try {
+    res = await fetch(requestUrl);
+  } catch (netErr: unknown) {
+    const netMsg = netErr instanceof Error ? netErr.message : String(netErr);
+    console.error(
+      `[DIAGNOSTIC - CLIENT GET NETWORK FAILURE] Network error fetching invitation "${cleanId}":`,
+      netErr
+    );
+    throw new ApiError(
+      `Network / request failure: Unable to reach the server (${netMsg}). Check your internet connection.`,
+      0,
+      'NETWORK_FAILURE',
+      {
+        status: 0,
+        queriedId: cleanId,
+        url: requestUrl,
+        actualDatabaseError: netMsg,
+        timestamp: new Date().toISOString(),
+      }
+    );
+  }
+
+  console.log(
+    `[DIAGNOSTIC - CLIENT GET STATUS] Server responded with HTTP status: ${res.status} (${res.statusText})`
+  );
+
+  const data = await parseJsonResponse<{
+    success: boolean;
+    invitation: PublicInvitation;
+    diagnostic?: ApiDiagnostic;
+  }>(res, 'Invitation retrieval failed');
+
+  console.log(
+    `[DIAGNOSTIC - CLIENT GET SUCCESS] Successfully retrieved invitation: ID "${data.invitation.id}" (Recipient: "${data.invitation.recipientName}")`
   );
   return data.invitation;
 }

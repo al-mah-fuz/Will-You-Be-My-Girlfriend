@@ -26,7 +26,11 @@ export default function App() {
     // Check pathname: /invite/:id, /invitation/:id, /invitations/:id
     const inviteMatch = path.match(/^\/(?:invite|invitations?)\/([^/?#]+)/i);
     if (inviteMatch && inviteMatch[1]) {
-      setActiveInvitationId(decodeURIComponent(inviteMatch[1].trim()));
+      const parsedId = decodeURIComponent(inviteMatch[1].trim());
+      console.log(
+        `[DIAGNOSTIC - ROUTE] The exact invitation ID received by the recipient page (from path "${path}"): "${parsedId}"`
+      );
+      setActiveInvitationId(parsedId);
       setCurrentView('recipient');
       return;
     }
@@ -34,7 +38,11 @@ export default function App() {
     // Check hash fallback: #/invite/:id, #invite/:id, #/invitation/:id
     const hashMatch = hash.match(/^#\/?(?:invite|invitations?)\/([^/?#]+)/i);
     if (hashMatch && hashMatch[1]) {
-      setActiveInvitationId(decodeURIComponent(hashMatch[1].trim()));
+      const parsedId = decodeURIComponent(hashMatch[1].trim());
+      console.log(
+        `[DIAGNOSTIC - ROUTE] The exact invitation ID received by the recipient page (from hash "${hash}"): "${parsedId}"`
+      );
+      setActiveInvitationId(parsedId);
       setCurrentView('recipient');
       return;
     }
@@ -47,7 +55,11 @@ export default function App() {
       searchParams.get('invitationId') ||
       searchParams.get('invitation_id');
     if (queryInvite && queryInvite.trim()) {
-      setActiveInvitationId(decodeURIComponent(queryInvite.trim()));
+      const parsedId = decodeURIComponent(queryInvite.trim());
+      console.log(
+        `[DIAGNOSTIC - ROUTE] The exact invitation ID received by the recipient page (from query parameter): "${parsedId}"`
+      );
+      setActiveInvitationId(parsedId);
       setCurrentView('recipient');
       return;
     }

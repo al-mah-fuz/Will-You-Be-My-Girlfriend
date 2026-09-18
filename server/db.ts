@@ -200,16 +200,22 @@ export async function initDb(): Promise<void> {
  * Atomically persist all invitations to disk (both writable dir and local data dir if available)
  */
 async function persistToDisk(): Promise<void> {
+  const uniqueRecords = Array.from(
+    new Map(Array.from(invitationsMap.values()).map((inv) => [inv.id, inv])).values()
+  );
+
   try {
     if (!fs.existsSync(WRITABLE_DATA_DIR)) {
       fs.mkdirSync(WRITABLE_DATA_DIR, { recursive: true });
     }
-    const all = Array.from(invitationsMap.values());
     const tempFile = `${DB_FILE}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    await fs.promises.writeFile(tempFile, JSON.stringify(all, null, 2), 'utf-8');
+    await fs.promises.writeFile(tempFile, JSON.stringify(uniqueRecords, null, 2), 'utf-8');
     await fs.promises.rename(tempFile, DB_FILE);
+    console.log(
+      `[DIAGNOSTIC - DB WRITE] Persisted to collection "invitations" | File: "${DB_FILE}" | Total unique records: ${uniqueRecords.length}`
+    );
   } catch (err) {
-    console.warn('Could not write database to DB_FILE (continuing with memory):', err);
+    console.warn('[DIAGNOSTIC - DB WRITE ERROR] Could not write database to DB_FILE:', err);
   }
 
   // Also sync to process.cwd()/data/invitations.json if that directory exists
@@ -217,8 +223,7 @@ async function persistToDisk(): Promise<void> {
     const localDir = path.join(process.cwd(), 'data');
     const localFile = path.join(localDir, 'invitations.json');
     if (localFile !== DB_FILE && fs.existsSync(localDir)) {
-      const all = Array.from(invitationsMap.values());
-      await fs.promises.writeFile(localFile, JSON.stringify(all, null, 2), 'utf-8');
+      await fs.promises.writeFile(localFile, JSON.stringify(uniqueRecords, null, 2), 'utf-8');
     }
   } catch {
     // Non-fatal if local directory is read-only in production
@@ -280,12 +285,38 @@ async function fetchFromKv(id: string): Promise<Invitation | null> {
 }
 
 /**
+ * Returns technical diagnostic information about the database and stored records.
+ * Omits any private creator emails or sensitive secrets.
+ */
+export function getDatabaseDiagnosticInfo(): {
+  storageType: string;
+  collection: string;
+  dbFilePath: string;
+  writableDir: string;
+  totalRecords: number;
+  knownIds: string[];
+} {
+  const uniqueItems = Array.from(
+    new Map(Array.from(invitationsMap.values()).map((inv) => [inv.id, inv])).values()
+  );
+  return {
+    storageType: 'file-backed-json-store',
+    collection: 'invitations',
+    dbFilePath: DB_FILE,
+    writableDir: WRITABLE_DATA_DIR,
+    totalRecords: uniqueItems.length,
+    knownIds: uniqueItems.map((i) => i.id),
+  };
+}
+
+/**
  * Helper to re-read files if an invitation is not currently in memory.
  * Essential for multi-process or serverless environments.
  */
 function lookupOnDisk(id: string): Invitation | null {
   const candidateFiles = [
     DB_FILE,
+    path.join(os.tmpdir(), 'girlfriend_app_data', 'invitations.json'),
     path.join(os.tmpdir(), 'invitations.json'),
     path.join(process.cwd(), 'data', 'invitations.json'),
     path.join(process.cwd(), 'invitations.json'),
@@ -344,6 +375,10 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
   invitationsMap.set(id, invitation);
   invitationsMap.set(id.toLowerCase(), invitation);
 
+  console.log(
+    `[DIAGNOSTIC - DB CREATION] Generated invitation ID: "${invitation.id}" | Collection: "invitations" | DB File: "${DB_FILE}"`
+  );
+
   // Persist locally & cloud KV
   await persistToDisk();
   await syncToKv(invitation);
@@ -359,33 +394,64 @@ export async function getInvitation(id: string): Promise<Invitation | null> {
   if (!id || typeof id !== 'string') return null;
   const cleanId = id.trim();
   if (!cleanId) return null;
-  await initDb();
 
-  // 1. Check in-memory cache first (exact match)
-  let cached = invitationsMap.get(cleanId);
-  if (cached) return cached;
+  console.log(
+    `[DIAGNOSTIC - DB QUERY] Querying Collection: "invitations" | Target File: "${DB_FILE}" | Queried ID: "${cleanId}"`
+  );
 
-  // 2. Check in-memory cache (case-insensitive fallback)
-  const lowerCleanId = cleanId.toLowerCase();
-  for (const [key, val] of invitationsMap.entries()) {
-    if (
-      key.toLowerCase() === lowerCleanId ||
-      val.id.toLowerCase() === lowerCleanId ||
-      (val.invitationId && val.invitationId.toLowerCase() === lowerCleanId)
-    ) {
-      return val;
+  try {
+    await initDb();
+
+    // 1. Check in-memory cache first (exact match)
+    let cached = invitationsMap.get(cleanId);
+    if (cached) {
+      console.log(
+        `[DIAGNOSTIC - DB QUERY RESULT] Found in memory: ID "${cleanId}" | Recipient: "${cached.recipientName}" | Status: "${cached.responseStatus}"`
+      );
+      return cached;
     }
+
+    // 2. Check in-memory cache (case-insensitive fallback)
+    const lowerCleanId = cleanId.toLowerCase();
+    for (const [key, val] of invitationsMap.entries()) {
+      if (
+        key.toLowerCase() === lowerCleanId ||
+        val.id.toLowerCase() === lowerCleanId ||
+        (val.invitationId && val.invitationId.toLowerCase() === lowerCleanId)
+      ) {
+        console.log(
+          `[DIAGNOSTIC - DB QUERY RESULT] Found in memory (case-insensitive): ID "${cleanId}" -> matched record "${val.id}"`
+        );
+        return val;
+      }
+    }
+
+    // 3. Re-read disk files to catch changes made by other processes or workers
+    const fromDisk = lookupOnDisk(cleanId);
+    if (fromDisk) {
+      console.log(
+        `[DIAGNOSTIC - DB QUERY RESULT] Found on disk: ID "${cleanId}" | Recipient: "${fromDisk.recipientName}"`
+      );
+      return fromDisk;
+    }
+
+    // 4. Check Cloud KV if available (e.g. multi-region Vercel functions)
+    const fromKv = await fetchFromKv(cleanId);
+    if (fromKv) {
+      console.log(
+        `[DIAGNOSTIC - DB QUERY RESULT] Found in Cloud KV: ID "${cleanId}" | Recipient: "${fromKv.recipientName}"`
+      );
+      return fromKv;
+    }
+
+    console.log(
+      `[DIAGNOSTIC - DB QUERY RESULT] NOT FOUND: Invitation ID "${cleanId}" genuinely does not exist in collection "invitations" (${DB_FILE}). Total records in store: ${invitationsMap.size}`
+    );
+    return null;
+  } catch (err) {
+    console.error(`[DIAGNOSTIC - DB ERROR] Error querying invitation ID "${cleanId}":`, err);
+    throw err;
   }
-
-  // 3. Re-read disk files to catch changes made by other processes or workers
-  const fromDisk = lookupOnDisk(cleanId);
-  if (fromDisk) return fromDisk;
-
-  // 4. Check Cloud KV if available (e.g. multi-region Vercel functions)
-  const fromKv = await fetchFromKv(cleanId);
-  if (fromKv) return fromKv;
-
-  return null;
 }
 
 /**
